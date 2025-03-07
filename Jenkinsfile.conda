@@ -1,0 +1,2 @@
+@Library('JenkinsShared')_
+CondaPipeline("", "kafka-tools", "lsst.ts.kafka_tools", "noarch")

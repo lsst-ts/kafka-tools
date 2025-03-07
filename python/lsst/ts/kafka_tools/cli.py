@@ -1,0 +1,181 @@
+# This file is part of kafka_tools.
+#
+# Developed for the Rubin Observatory.
+# This product includes software developed by the Rubin Observatory Project
+# (https://rubinobservatory.org/).
+# See the COPYRIGHT file at the top-level directory of this distribution
+# for details of code ownership.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+from __future__ import annotations
+
+import pathlib
+from functools import update_wrapper
+from typing import Any
+
+import click
+
+from .auth import create_properties_files
+from .constants import SITES, ListConsumerOpts, ListTopicsOpts
+from .consumers import delete_consumers, list_consumers, summarize_consumers
+from .print_helpers import (
+    consumer_summary,
+    filtered_topics,
+    summerize_consumer_deletion,
+    two_column_table,
+)
+from .topics import get_topics
+
+__all__ = ["auth", "auth_create_prop_files", "main", "topics", "topics_list"]
+
+
+def pass_obj(f: Any) -> Any:
+    @click.pass_context
+    def new_func(ctx: click.Context, *args: Any, **kwargs: Any) -> Any:
+        return ctx.invoke(f, ctx.obj, *args, **kwargs)
+
+    return update_wrapper(new_func, f)
+
+
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
+@click.version_option(message="%(version)s")
+def main() -> None:
+    """Command line interface for Kafka operations."""
+
+
+@main.group()
+def auth() -> None:
+    """Authentication commands."""
+
+
+@auth.command("create-prop-files")
+@click.option(
+    "--auth-dir",
+    type=click.Path(path_type=pathlib.Path),
+    help="Directory to create auth properties files in.",
+)
+def auth_create_prop_files(auth_dir: pathlib.Path | None) -> None:
+    """Create authorization properties files with no password."""
+    create_properties_files(auth_dir)
+
+
+@main.group()
+@click.argument("site", type=click.Choice(SITES, case_sensitive=False))
+@click.pass_context
+def topics(ctx: click.Context, site: str) -> None:
+    """Commands for Kafka topics."""
+    ctx.obj = {
+        "site": site,
+    }
+
+
+@topics.command("list")
+@click.option(
+    "--regex", type=str, help="Pass a regular expression to filter the topic list."
+)
+@click.option("--name", type=str, help="Pass a name to filter the topic list.")
+@click.pass_context
+def topics_list(ctx: click.Context, regex: str | None, name: str | None) -> None:
+    """List the available Kafka topics."""
+    if regex is not None and name is not None:
+        raise click.exceptions.UsageError(
+            "Cannot use regex and name options simultaneously.", ctx
+        )
+    topics = get_topics(ctx.obj)
+    filtered_topics(topics, ListTopicsOpts(regex=regex, name=name))
+
+
+@main.group()
+@click.argument("site", type=click.Choice(SITES, case_sensitive=False))
+@click.option(
+    "--timeout",
+    type=int,
+    default=30000,
+    help="Set the timeout for the kafka commands in milliseconds.",
+)
+@click.pass_context
+def consumers(ctx: click.Context, site: str, timeout: int) -> None:
+    """Commands for Kafka consumers and consumer groups."""
+    ctx.obj = {
+        "site": site,
+        "timeout": timeout,
+    }
+
+
+@consumers.command("summary")
+@click.option(
+    "--no-telegraph-filter",
+    is_flag=True,
+    help="Don't filter telegraph consumers from list.",
+)
+@click.pass_context
+def consumers_summary(ctx: click.Context, no_telegraph_filter: bool) -> None:
+    """Summarize number of consumer groups."""
+    summary = summarize_consumers(ctx.obj, no_telegraph_filter=no_telegraph_filter)
+    consumer_summary(summary)
+
+
+@consumers.command("list")
+@click.option(
+    "--no-connector-filter",
+    is_flag=True,
+    help="Don't filter connector consumers from list.",
+)
+@click.option(
+    "--all",
+    "consumer_state",
+    flag_value="All",
+    default=True,
+    help="Show all consumers.",
+)
+@click.option(
+    "--active", "consumer_state", flag_value="Stable", help="Show active consumers."
+)
+@click.option(
+    "--inactive", "consumer_state", flag_value="Empty", help="Show inactive consumers."
+)
+@click.pass_context
+def consumers_list(
+    ctx: click.Context, no_connector_filter: bool, consumer_state: str
+) -> None:
+    """Filter the present consumer groups."""
+    consumers, max_length = list_consumers(
+        ctx.obj,
+        ListConsumerOpts(
+            no_connector_filter=no_connector_filter, consumer_state=consumer_state
+        ),
+    )
+    two_column_table(consumers, max_length)
+
+
+@consumers.command("delete")
+@click.option(
+    "--delete-connectors",
+    is_flag=True,
+    help="Allow the deletion of telegraf consumers.",
+)
+@click.pass_context
+def consumers_delete(ctx: click.Context, delete_connectors: bool) -> None:
+    """Delete all inactive consumer groups"""
+    consumers, _ = list_consumers(
+        ctx.obj,
+        ListConsumerOpts(no_connector_filter=delete_connectors, consumer_state="Empty"),
+    )
+    consumers_to_delete = [x[0] for x in consumers]
+    if not len(consumers_to_delete):
+        print("No consumers to delete.")
+        return
+    done, not_done = delete_consumers(ctx.obj, consumers_to_delete)
+    summerize_consumer_deletion(done, not_done)

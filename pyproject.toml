@@ -1,0 +1,55 @@
+[build-system]
+requires = [
+    "setuptools>=64",
+    "setuptools_scm[toml]>=8",
+    "wheel",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kafka_tools"
+description = "Streamlining repetative Kafka operations."
+license = {file = "LICENSE"}
+readme = "README.md"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: GPL3",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Intended Audience :: Developers",
+    "Operating System :: POSIX",
+]
+requires-python = ">=3.11"
+dynamic = [ "version" ]
+dependencies = [
+  "confluent-kafka",
+  "click",
+  "jproperties"
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = { attr = "setuptools_scm.get_version" }
+
+[tool.setuptools_scm]
+
+[tool.setuptools.packages.find]
+where = [ "python" ]
+
+[tool.setuptools.package-data]
+kafka_tools = ["py.typed"]
+
+[project.scripts]
+kt = "lsst.ts.kafka_tools.cli:main"
+
+[project.urls]
+Homepage = "https://kafka_tools.lsst.io"
+Source = "https://github.com/lsst-ts/kafka-tools"
+
+[project.optional-dependencies]
+dev = [
+    "pytest"
+]

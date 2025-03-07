@@ -1,0 +1,43 @@
+{% set data= load_setup_py_data() %}
+package:
+  name: kafka-tools
+  version: {{ data.get('version') }}
+
+source:
+  path: ..
+
+build:
+  noarch: generic
+  script: {{ PYTHON }} -m pip install --no-deps --ignore-installed .
+
+test:
+  requires:
+    - python-confluent-kafka
+    - click
+    - jproperties
+    - ts-conda-build =0.4
+  source_files:
+    - python
+    - tests
+    - pyproject.toml
+  commands:
+    - pytest -v
+
+requirements:
+  host:
+    - python {{ python }}
+    - pip
+    - setuptools_scm
+    - setuptools
+  build:
+    - python {{ python }}
+    - setuptools_scm
+    - setuptools
+  run:
+    - python {{ python }}
+    - python-confluent-kafka
+    - click
+    - jproperties
+
+about:
+  home: https://github.com/lsst-ts/kafka-tools
