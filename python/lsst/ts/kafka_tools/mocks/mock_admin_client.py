@@ -20,12 +20,17 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import concurrent.futures
+from typing import Any
 
 from confluent_kafka import ConsumerGroupState
 from confluent_kafka.admin import (
     ClusterMetadata,
+    ConfigEntry,
+    ConfigResource,
+    ConfigSource,
     ConsumerGroupListing,
     ListConsumerGroupsResult,
+    NewPartitions,
     PartitionMetadata,
     TopicMetadata,
 )
@@ -40,8 +45,36 @@ class MockAdminClient:
         self.cluster_md = ClusterMetadata()
         self.cgl: list[ConsumerGroupListing] = []
         self.empty_consumers: list[str] = []
+        self.broker_config: dict[str, ConfigEntry] = {}
         self._create_topics()
         self._create_consumers()
+        self._create_broker_config()
+
+    def _create_broker_config(self) -> None:
+        """Create a broker configuration."""
+        parameters: list[tuple[str, Any, list[tuple[int, Any]]]] = [
+            (
+                "log.message.timestamp.type",
+                "LogAppendTime",
+                [(4, None), (5, "CreateTime")],
+            ),
+            ("group.min.session.timeout.ms", 60000, [(5, None)]),
+        ]
+
+        for parameter in parameters:
+            synonyms = {}
+            for synonym in parameter[2]:
+                value = parameter[1] if synonym[1] is None else synonym[1]
+                synonyms[parameter[0]] = ConfigEntry(
+                    parameter[0], value, ConfigSource(synonym[0])
+                )
+
+            self.broker_config[parameter[0]] = ConfigEntry(
+                parameter[0],
+                parameter[1],
+                is_sensitive=False,
+                synonyms=synonyms,
+            )
 
     def _create_consumers(self) -> None:
         """Create consumers."""
@@ -78,8 +111,10 @@ class MockAdminClient:
             "topic2.attribute1",
             "topic2.attribute2",
             "topic2.attribute3",
+            "lsst.sal.ATAOS.command_start",
             "lsst.sal.ATAOS.logevent_heartbeat",
             "lsst.sal.ATAOS.logevent_summaryState",
+            "lsst.sal.ATAOS.timestamp",
         ]
 
         topics = {}
@@ -91,6 +126,18 @@ class MockAdminClient:
 
         self.cluster_md.topics = topics
 
+    def create_partitions(
+        self,
+        partitions: list[NewPartitions],
+    ) -> dict[str, concurrent.futures.Future]:
+        """Expand partitions for topics."""
+        result = {}
+        for partition in partitions:
+            f: concurrent.futures.Future = concurrent.futures.Future()
+            f.set_result(None)
+            result[partition.topic] = f
+        return result
+
     def delete_consumer_groups(
         self, consumer_groups: list[str]
     ) -> dict[str, concurrent.futures.Future]:
@@ -100,6 +147,39 @@ class MockAdminClient:
             f: concurrent.futures.Future = concurrent.futures.Future()
             f.set_result(None)
             result[consumer_group] = f
+        return result
+
+    def delete_topics(self, topics: list[str]) -> dict[str, concurrent.futures.Future]:
+        """Delete topics."""
+        result = {}
+        for topic in topics:
+            f: concurrent.futures.Future = concurrent.futures.Future()
+            f.set_result(None)
+            result[topic] = f
+        return result
+
+    def describe_configs(
+        self,
+        resources: list[ConfigResource],
+    ) -> dict[ConfigResource, concurrent.futures.Future]:
+        """Describe configs."""
+        result = {}
+        for resource in resources:
+            f: concurrent.futures.Future = concurrent.futures.Future()
+            f.set_result(self.broker_config)
+            result[resource] = f
+        return result
+
+    def incremental_alter_configs(
+        self,
+        resources: list[ConfigResource],
+    ) -> dict[ConfigResource, concurrent.futures.Future]:
+        """Incrementally alter configuration."""
+        result = {}
+        for resource in resources:
+            f: concurrent.futures.Future = concurrent.futures.Future()
+            f.set_result(None)
+            result[resource] = f
         return result
 
     def list_consumer_groups(

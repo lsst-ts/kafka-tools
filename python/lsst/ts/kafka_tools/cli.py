@@ -28,15 +28,18 @@ from typing import Any
 import click
 
 from .auth import create_properties_files
+from .configs import show_broker_config
 from .constants import SITES, ListConsumerOpts, ListTopicsOpts
 from .consumers import delete_consumers, list_consumers, summarize_consumers
+from .helpers import acknowledge_deletion
 from .print_helpers import (
     consumer_summary,
     filtered_topics,
-    summerize_consumer_deletion,
+    list_broker_configs,
+    summerize_deletion,
     two_column_table,
 )
-from .topics import get_topics
+from .topics import delete_topics, filter_topics, get_topics, set_partitions_topics
 
 __all__ = ["auth", "auth_create_prop_files", "main", "topics", "topics_list"]
 
@@ -94,7 +97,75 @@ def topics_list(ctx: click.Context, regex: str | None, name: str | None) -> None
             "Cannot use regex and name options simultaneously.", ctx
         )
     topics = get_topics(ctx.obj)
-    filtered_topics(topics, ListTopicsOpts(regex=regex, name=name))
+    filtered_topics(
+        topics, ListTopicsOpts(regex=regex, name=name, name_list=None, name_file=None)
+    )
+
+
+@topics.command("delete")
+@click.option(
+    "--regex", type=str, help="Pass a regular expression to filter the topic list."
+)
+@click.option("--name", type=str, help="Pass a name to filter the topic list.")
+@click.option(
+    "--name-list",
+    type=str,
+    help="Comma-delimited list of names to filter the topic list.",
+)
+@click.option("--name-file", type=pathlib.Path, help="File ")
+@click.pass_context
+def topics_delete(
+    ctx: click.Context,
+    regex: str | None,
+    name: str | None,
+    name_list: str | None,
+    name_file: pathlib.Path | None,
+) -> None:
+    """Delete topics."""
+    check_args = [
+        regex is not None,
+        name is not None,
+        name_list is not None,
+        name_file is not None,
+    ]
+    if sum(check_args) > 1:
+        raise click.exceptions.UsageError(
+            "Cannot use regex, name, name-list and name-file options simultaneously.",
+            ctx,
+        )
+    if not sum(check_args):
+        raise click.exceptions.UsageError(
+            "Must provide one of the following options: --regex, --name, --name-list or --name-file.",
+            ctx,
+        )
+
+    message = f"Delete all requested topics from {ctx.obj['site']}"
+    acknowledge_deletion(message)
+
+    topics = filter_topics(
+        ctx.obj,
+        ListTopicsOpts(
+            regex=regex, name=name, name_list=name_list, name_file=name_file
+        ),
+    )
+    done, not_done = delete_topics(ctx.obj, topics)
+    summerize_deletion("topics", done, not_done)
+
+
+@topics.command("set-partitions")
+@click.argument("csc")
+@click.argument("number")
+@click.pass_context
+def topics_set_partitions(ctx: click.Context, csc: str, number: str) -> None:
+    """Change the number of partitions on CSC telemetry topics."""
+    topics = filter_topics(
+        ctx.obj, ListTopicsOpts(regex=None, name=csc, name_list=None, name_file=None)
+    )
+    done, not_done = set_partitions_topics(ctx.obj, topics, csc, int(number))
+    num_done = len(done)
+    num_not_done = len(not_done)
+    print(f"Found {num_done + num_not_done} topics to modify")
+    print(f"{num_done} modified successfully, {num_not_done} not successfully modified")
 
 
 @main.group()
@@ -178,4 +249,23 @@ def consumers_delete(ctx: click.Context, delete_connectors: bool) -> None:
         print("No consumers to delete.")
         return
     done, not_done = delete_consumers(ctx.obj, consumers_to_delete)
-    summerize_consumer_deletion(done, not_done)
+    summerize_deletion("consumers", done, not_done)
+
+
+@main.group()
+@click.argument("site", type=click.Choice(SITES, case_sensitive=False))
+@click.pass_context
+def config(ctx: click.Context, site: str) -> None:
+    """Commands for configurations."""
+    ctx.obj = {
+        "site": site,
+    }
+
+
+@config.command("brokers")
+@click.argument("broker-id", type=str)
+@click.pass_context
+def config_brokers(ctx: click.Context, broker_id: str) -> None:
+    """Show the broker configuration."""
+    configs = show_broker_config(ctx.obj, broker_id)
+    list_broker_configs(broker_id, configs)

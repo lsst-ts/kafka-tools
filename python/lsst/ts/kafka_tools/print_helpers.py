@@ -24,14 +24,15 @@ from __future__ import annotations
 import re
 from concurrent.futures import Future
 
-from confluent_kafka.admin import ClusterMetadata
+from confluent_kafka.admin import ClusterMetadata, ConfigEntry, ConfigSource
 
 from .constants import ListTopicsOpts
 
 __all__ = [
     "consumer_summary",
     "filtered_topics",
-    "summerize_consumer_deletion",
+    "list_broker_configs",
+    "summerize_deletion",
     "two_column_table",
 ]
 
@@ -74,13 +75,42 @@ def filtered_topics(topics: ClusterMetadata, opts: ListTopicsOpts) -> None:
             print(topic)
 
 
-def summerize_consumer_deletion(
-    deletes_done: set[Future], deletes_not_done: set[Future]
-) -> None:
-    """Summarize the consumer deletion action.
+def list_broker_configs(broker_id: str, configs: list[ConfigEntry]) -> None:
+    """Print out the broker configuration.
 
     Parameters
     ----------
+    broker_id : str
+        The ID of the broker.
+    configs : list[ConfigEntry]
+        The list of configuration entries.
+    """
+    print(f"All configs for broker {broker_id} are:")
+    for config in configs:
+        if config.value is None:
+            cvalue = "null"
+        else:
+            cvalue = config.value
+
+        synonyms = []
+        for v in config.synonyms.values():
+            synonyms.append(f"{ConfigSource(v.source).name}:{v.name}={v.value}")
+
+        is_sensitive = str(config.is_sensitive).lower()
+        print(
+            f"  {config.name}={cvalue} sensitive={is_sensitive} synonyms={{{', '.join(synonyms)}}}"
+        )
+
+
+def summerize_deletion(
+    type_del: str, deletes_done: set[Future], deletes_not_done: set[Future]
+) -> None:
+    """Summarize the deletion action.
+
+    Parameters
+    ----------
+    type_del: str
+        The type of item being deleted.
     deletes_done : set[Future]
         Set of deletes completed successfully.
     deletes_not_done : set[Future]
@@ -89,7 +119,7 @@ def summerize_consumer_deletion(
     num_done = len(deletes_done)
     num_not_done = len(deletes_not_done)
 
-    print(f"Found {num_done + num_not_done} consumers to delete")
+    print(f"Found {num_done + num_not_done} {type_del} to delete")
     print(f"{num_done} deleted successfully, {num_not_done} not successfully deleted")
 
 

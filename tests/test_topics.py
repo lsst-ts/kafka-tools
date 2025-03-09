@@ -19,6 +19,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import os
+import pathlib
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
@@ -27,6 +29,11 @@ from lsst.ts.kafka_tools.mocks.mock_admin_client import MockAdminClient
 from lsst.ts.kafka_tools.mocks.topic_responses import (
     csc_filtered_topics,
     list_topics,
+    name_delete,
+    name_file_delete,
+    name_list_delete,
+    partition_expansion,
+    regex_delete,
     regex_filtered_topics,
 )
 
@@ -57,6 +64,69 @@ def test_topics_list(mock_gen_admin_client: MagicMock) -> None:
         assert result.stdout == regex_filtered_topics
 
         result = runner.invoke(
-            main, ["topics", "test", "list", "--regex", "3$", "--name", "ATAOS"]
+            main, ["topics", "local", "list", "--regex", "3$", "--name", "ATAOS"]
         )
         assert result.exit_code == 2
+
+
+@patch("lsst.ts.kafka_tools.topics.generate_admin_client", spec=True)
+def test_topics_delete(mock_gen_admin_client: MagicMock) -> None:
+    mock_gen_admin_client.return_value = MockAdminClient()
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            main, ["topics", "local", "delete", "--regex", "3$"], input="N"
+        )
+        assert result.exit_code == 255
+
+        result = runner.invoke(
+            main, ["topics", "local", "delete", "--regex", "3$"], input="y"
+        )
+        assert result.exit_code == 0
+        assert result.stdout == regex_delete
+
+        result = runner.invoke(
+            main, ["topics", "local", "delete", "--name", "topic1"], input="y"
+        )
+        assert result.exit_code == 0
+        assert result.stdout == name_delete
+
+        result = runner.invoke(
+            main,
+            ["topics", "local", "delete", "--name-list", "topic2,ATAOS"],
+            input="y",
+        )
+        assert result.exit_code == 0
+        assert result.stdout == name_list_delete
+
+        ofile = pathlib.Path("topic_list.txt")
+        ofile.write_text(os.linesep.join(["topic1", "topic2"]))
+
+        result = runner.invoke(
+            main,
+            ["topics", "local", "delete", "--name-file", "topic_list.txt"],
+            input="y",
+        )
+        assert result.exit_code == 0
+        assert result.stdout == name_file_delete
+
+    result = runner.invoke(main, ["topics", "local", "delete"])
+    assert result.exit_code == 2
+
+    result = runner.invoke(
+        main, ["topics", "local", "delete", "--regex", "3$", "--name", "ATAOS"]
+    )
+    assert result.exit_code == 2
+
+
+@patch("lsst.ts.kafka_tools.topics.generate_admin_client", spec=True)
+def test_topics_partitions(mock_gen_admin_client: MagicMock) -> None:
+    mock_gen_admin_client.return_value = MockAdminClient()
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            main, ["topics", "local", "set-partitions", "ATAOS", "8"]
+        )
+        assert result.exit_code == 0
+        assert result.stdout == partition_expansion

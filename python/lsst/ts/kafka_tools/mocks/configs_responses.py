@@ -19,24 +19,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import dataclasses
-import pathlib
+from __future__ import annotations
 
-__all__ = ["ListConsumerOpts", "ListTopicsOpts", "SITES"]
-
-
-SITES = ["tts", "bts", "summit", "local", "envvar"]
+__all__ = ["broker_config"]
 
 
-@dataclasses.dataclass
-class ListConsumerOpts:
-    no_connector_filter: bool
-    consumer_state: str
-
-
-@dataclasses.dataclass
-class ListTopicsOpts:
-    regex: str | None
-    name: str | None
-    name_list: str | None
-    name_file: pathlib.Path | None
+broker_config = """All configs for broker 2 are:
+  group.min.session.timeout.ms=60000 sensitive=false synonyms=\
+{DEFAULT_CONFIG:group.min.session.timeout.ms=60000}
+  log.message.timestamp.type=LogAppendTime sensitive=false synonyms=\
+{DEFAULT_CONFIG:log.message.timestamp.type=CreateTime}
+"""

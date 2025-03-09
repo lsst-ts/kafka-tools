@@ -21,22 +21,43 @@
 
 from __future__ import annotations
 
+import concurrent.futures
+import logging
+import os
 import re
+
+from confluent_kafka.admin import NewPartitions
 
 from .constants import ListTopicsOpts
 from .helpers import generate_admin_client
-from .type_hints import ScriptContext
+from .type_hints import DoneAndNotDoneFutures, ScriptContext
 
-__all__ = ["get_topics", "list_topics"]
+__all__ = ["delete_topics", "filter_topics", "get_topics", "set_partitions_topics"]
 
 
-def get_topics(ctxobj: ScriptContext) -> list[str]:
+def delete_topics(ctxobj: ScriptContext, topics: list[str]) -> DoneAndNotDoneFutures:
+    """Delete the list of topics.
+
+    Parameters
+    ----------
+    ctxobj : ScriptContext
+
+    topics : list[str]
+        List of topics to delete.
+
+    Returns
+    -------
+    DoneAndNotDoneFutures
+        The done and not done futures.
+    """
     client = generate_admin_client(ctxobj["site"])
-    topics = client.list_topics()
-    return topics
+
+    topics_to_delete = client.delete_topics(topics)
+    results = concurrent.futures.wait(list(topics_to_delete.values()))
+    return (results.done, results.not_done)
 
 
-def list_topics(ctxobj: ScriptContext, opts: ListTopicsOpts) -> None:
+def filter_topics(ctxobj: ScriptContext, opts: ListTopicsOpts) -> list[str]:
     """List topics from system and possibly filter the list.
 
     Parameters
@@ -48,14 +69,80 @@ def list_topics(ctxobj: ScriptContext, opts: ListTopicsOpts) -> None:
     """
     client = generate_admin_client(ctxobj["site"])
     result = client.list_topics()
+    topics: list[str] = []
     regex = None
+    name_set = None
     if opts.regex is not None:
         regex = re.compile(repr(opts.regex)[1:-1])
+    if opts.name_list is not None:
+        name_set = opts.name_list.split(",")
+    if opts.name_file is not None:
+        ifile = opts.name_file.expanduser()
+        name_set = ifile.read_text().split(os.linesep)
     for topic in sorted(result.topics.keys()):
-        print_topic = True
-        if opts.name is not None:
-            print_topic = opts.name in topic
-        if regex is not None:
-            print_topic = regex.search(topic) is not None
-        if print_topic:
-            print(topic)
+        if opts.name is not None and opts.name in topic:
+            topics.append(topic)
+        if regex is not None and regex.search(topic) is not None:
+            topics.append(topic)
+        if name_set is not None:
+            for name in name_set:
+                if name in topic:
+                    topics.append(topic)
+
+    return topics
+
+
+def get_topics(ctxobj: ScriptContext) -> list[str]:
+    """Get all topics.
+
+    Parameters
+    ----------
+    ctxobj : ScriptContext
+        The context object from the CLI invocation.
+
+    Returns
+    -------
+    list[str]
+        List of all the topics.
+    """
+    client = generate_admin_client(ctxobj["site"])
+    topics = client.list_topics()
+    return topics
+
+
+def set_partitions_topics(
+    ctxobj: ScriptContext, topics: list[str], csc: str, partitions: int
+) -> DoneAndNotDoneFutures:
+    """Set partitions on CSC telemetry topics.
+
+    Parameters
+    ----------
+    ctxobj : ScriptContext
+        The context object from the CLI invocation.
+    topics : list[str]
+        The list of topics to modify. May contain similarly named CSCs.
+    csc : str
+        CSC name for exact checking.
+    partitions : int
+        The number of partitions to set on the topics.
+
+    Returns
+    -------
+    DoneAndNotDoneFutures
+        The done and not done futures.
+    """
+    telemetry_topics: list[NewPartitions] = []
+    for topic in topics:
+        values = topic.split(".")
+        if csc != values[2]:
+            continue
+        if values[3].startswith(("ackcmd", "logevent", "command")):
+            continue
+        else:
+            telemetry_topics.append(NewPartitions(topic, partitions))
+
+    client = generate_admin_client(ctxobj["site"])
+    topics_modified = client.create_partitions(telemetry_topics)
+    results = concurrent.futures.wait(list(topics_modified.values()))
+    logging.error(results.done)
+    return (results.done, results.not_done)

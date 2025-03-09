@@ -21,11 +21,15 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 from typing import Any, TypedDict
 
-__all__ = ["ScriptContext", "ScriptOptions"]
+__all__ = ["DoneAndNotDoneFutures", "ScriptContext", "ScriptOptions"]
 
 ScriptOptions = dict[str, Any]
+DoneAndNotDoneFutures = tuple[
+    set[concurrent.futures.Future], set[concurrent.futures.Future]
+]
 
 
 class ScriptContext(TypedDict):

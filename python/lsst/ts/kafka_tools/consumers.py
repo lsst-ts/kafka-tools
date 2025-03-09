@@ -28,7 +28,7 @@ from confluent_kafka.admin import ConsumerGroupListing
 
 from .constants import ListConsumerOpts
 from .helpers import generate_admin_client
-from .type_hints import ScriptContext
+from .type_hints import DoneAndNotDoneFutures, ScriptContext
 
 __all__ = ["delete_consumers", "list_consumers", "summarize_consumers"]
 
@@ -62,7 +62,7 @@ def _filter_telegraph_consumers(
 
 def delete_consumers(
     ctxobj: ScriptContext, consumers: list[str]
-) -> tuple[set[concurrent.futures.Future], set[concurrent.futures.Future]]:
+) -> DoneAndNotDoneFutures:
     """Delete all inactive consumers.
 
     Parameters
@@ -74,7 +74,7 @@ def delete_consumers(
 
     Returns
     -------
-    tuple[set[concurrent.futures.Future], set[concurrent.futures.Future]]
+    DoneAndNotDoneFutures
         The done and not done futures.
     """
     client = generate_admin_client(ctxobj["site"])

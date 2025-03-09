@@ -19,24 +19,25 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import dataclasses
-import pathlib
+from unittest.mock import MagicMock, patch
 
-__all__ = ["ListConsumerOpts", "ListTopicsOpts", "SITES"]
-
-
-SITES = ["tts", "bts", "summit", "local", "envvar"]
-
-
-@dataclasses.dataclass
-class ListConsumerOpts:
-    no_connector_filter: bool
-    consumer_state: str
+import lsst.ts.kafka_tools.mocks.configs_responses as mcr
+from click.testing import CliRunner
+from lsst.ts.kafka_tools.cli import main
+from lsst.ts.kafka_tools.mocks.mock_admin_client import MockAdminClient
 
 
-@dataclasses.dataclass
-class ListTopicsOpts:
-    regex: str | None
-    name: str | None
-    name_list: str | None
-    name_file: pathlib.Path | None
+def test_top_group() -> None:
+    runner = CliRunner()
+    result = runner.invoke(main, ["config"])
+    assert result.exit_code == 0
+
+
+@patch("lsst.ts.kafka_tools.configs.generate_admin_client", spec=True)
+def test_summarize_consumers(mock_gen_admin_client: MagicMock) -> None:
+    mock_gen_admin_client.return_value = MockAdminClient()
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["config", "local", "brokers", "2"])
+    assert result.exit_code == 0
+    assert result.stdout == mcr.broker_config
