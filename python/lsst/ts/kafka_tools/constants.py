@@ -31,6 +31,7 @@ SITES = ["tts", "bts", "summit", "local", "envvar"]
 @dataclasses.dataclass
 class ListConsumerOpts:
     regex: str | None
+    regex_mode: str
     no_connector_filter: bool
     consumer_state: str
 

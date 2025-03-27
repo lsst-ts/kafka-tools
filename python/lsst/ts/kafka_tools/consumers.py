@@ -126,8 +126,11 @@ def list_consumers(
         name = consumer.group_id
         if len(name) > max_length:
             max_length = len(name)
-        if opts.regex is not None and regex.search(name) is not None:
-            compact_list.append((name, consumer.state.name))
+        if opts.regex is not None:
+            if opts.regex_mode in "Inclusive" and regex.search(name) is not None:
+                compact_list.append((name, consumer.state.name))
+            if opts.regex_mode in "Exclusive" and regex.search(name) is None:
+                compact_list.append((name, consumer.state.name))
         elif opts.regex is None:
             compact_list.append((name, consumer.state.name))
 

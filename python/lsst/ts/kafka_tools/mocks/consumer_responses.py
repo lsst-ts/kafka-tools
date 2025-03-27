@@ -28,7 +28,8 @@ __all__ = [
     "list_all",
     "list_all_no_filter",
     "list_inactive",
-    "list_regex",
+    "list_regex_inclusive",
+    "list_regex_exclusive",
     "summary",
     "summary_no_filter",
 ]
@@ -77,13 +78,26 @@ list_inactive = """consumer13  EMPTY
 consumer10  EMPTY
 """
 
-list_regex = """consumer13  EMPTY
+list_regex_inclusive = """consumer1   STABLE
+consumer11  STABLE
+consumer21  STABLE
+"""
+
+list_regex_exclusive = """consumer5   STABLE
+consumer2   STABLE
+consumer6   STABLE
+consumer9   STABLE
+consumer13  EMPTY
+consumer10  EMPTY
 """
 
 delete_consumers = """Found 2 consumers to delete
 2 deleted successfully, 0 not successfully deleted
 """
 
-delete_consumers_regex = """Found 1 consumers to delete
+delete_consumers_regex_inclusive = """Found 1 consumers to delete
 1 deleted successfully, 0 not successfully deleted
+"""
+
+delete_consumers_regex_exclusive = """No consumers to delete.
 """
