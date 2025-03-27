@@ -23,10 +23,12 @@ from __future__ import annotations
 
 __all__ = [
     "delete_consumers",
+    "delete_consumers_regex"
     "list_active",
     "list_all",
     "list_all_no_filter",
     "list_inactive",
+    "list_regex",
     "summary",
     "summary_no_filter",
 ]
@@ -75,6 +77,13 @@ list_inactive = """consumer13  EMPTY
 consumer10  EMPTY
 """
 
+list_regex = """consumer13  EMPTY
+"""
+
 delete_consumers = """Found 2 consumers to delete
 2 deleted successfully, 0 not successfully deleted
+"""
+
+delete_consumers_regex = """Found 1 consumers to delete
+1 deleted successfully, 0 not successfully deleted
 """

@@ -29,6 +29,7 @@ from confluent_kafka.admin import ConsumerGroupListing
 from .constants import ListConsumerOpts
 from .helpers import generate_admin_client
 from .type_hints import DoneAndNotDoneFutures, ScriptContext
+import re
 
 __all__ = ["delete_consumers", "list_consumers", "summarize_consumers"]
 
@@ -112,7 +113,8 @@ def list_consumers(
         states.append(ConsumerGroupState.STABLE)
     if opts.consumer_state in ("All", "Empty"):
         states.append(ConsumerGroupState.EMPTY)
-
+    if opts.regex is not None:
+        regex = re.compile(repr(opts.regex)[1:-1])
     consumers_task = client.list_consumer_groups(states=set(states))
     concurrent.futures.wait([consumers_task], timeout=timeout)
     consumers = _filter_telegraph_consumers(
@@ -124,7 +126,10 @@ def list_consumers(
         name = consumer.group_id
         if len(name) > max_length:
             max_length = len(name)
-        compact_list.append((name, consumer.state.name))
+        if opts.regex is not None and regex.search(name) is not None:
+            compact_list.append((name, consumer.state.name))
+        elif opts.regex is None:
+            compact_list.append((name, consumer.state.name))
 
     return compact_list, max_length
 

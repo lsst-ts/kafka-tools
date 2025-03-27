@@ -77,6 +77,12 @@ def test_list_consumers(mock_gen_admin_client: MagicMock) -> None:
     assert result.exit_code == 0
     assert result.stdout == mcr.list_inactive
 
+    result = runner.invoke(
+            main, ["consumers", "--timeout", 1, "local", "list", "--regex", "3$"]
+        )
+    assert result.exit_code == 0
+    assert result.stdout == mcr.list_regex
+
 
 @patch("lsst.ts.kafka_tools.consumers.generate_admin_client", spec=True)
 def test_delete_consumers(mock_gen_admin_client: MagicMock) -> None:
@@ -95,3 +101,14 @@ def test_delete_consumers(mock_gen_admin_client: MagicMock) -> None:
     result = runner.invoke(main, ["consumers", "--timeout", 1, "local", "delete"])
     assert result.exit_code == 0
     assert result.stdout == mcr.delete_consumers
+
+    result = runner.invoke(main,["consumers", "--timeout", 1, "local", "delete"])
+    assert result.exit_code == 0
+    assert result.stdout == mcr.delete_consumers
+
+    result = runner.invoke(
+            main, ["consumers", "--timeout", 1, "local", "delete", "--regex", "3$"]
+        )
+    print(result)
+    assert result.exit_code == 0
+    assert result.stdout == mcr.delete_consumers_regex
