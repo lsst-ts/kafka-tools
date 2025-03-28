@@ -131,7 +131,7 @@ def list_consumers(
                 compact_list.append((name, consumer.state.name))
             if opts.regex_mode in "Exclusive" and regex.search(name) is None:
                 compact_list.append((name, consumer.state.name))
-        elif opts.regex is None:
+        else:
             compact_list.append((name, consumer.state.name))
 
     return compact_list, max_length
