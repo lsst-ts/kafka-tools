@@ -221,23 +221,40 @@ def consumers_summary(ctx: click.Context, no_telegraph_filter: bool) -> None:
     "--regex", type=str, help="Pass a regular expression to filter the consumer list."
 )
 @click.option(
-    "--regex-inclusive", "regex_mode", type=str, flag_value="Inclusive", help="Include consumers that match regex in list."
+    "--regex-inclusive",
+    "regex_mode",
+    type=str,
+    flag_value="Inclusive",
+    help="Include consumers that match regex in list.",
 )
 @click.option(
-    "--regex-exclusive", "regex_mode", default=True, type=str, flag_value="Exclusive", help="Exclude consumers that match regex from list (default mode)."
+    "--regex-exclusive",
+    "regex_mode",
+    default=True,
+    type=str,
+    flag_value="Exclusive",
+    help="Exclude consumers that match regex from list (default mode).",
 )
 @click.pass_context
 def consumers_list(
-    ctx: click.Context, regex: str | None, regex_mode: str, no_connector_filter: bool, consumer_state: str
+    ctx: click.Context,
+    regex: str | None,
+    regex_mode: str,
+    no_connector_filter: bool,
+    consumer_state: str,
 ) -> None:
     """Filter the present consumer groups."""
     consumers, max_length = list_consumers(
         ctx.obj,
         ListConsumerOpts(
-            regex=regex, regex_mode=regex_mode, no_connector_filter=no_connector_filter, consumer_state=consumer_state
+            regex=regex,
+            regex_mode=regex_mode,
+            no_connector_filter=no_connector_filter,
+            consumer_state=consumer_state,
         ),
     )
     two_column_table(consumers, max_length)
+
 
 @consumers.command("delete")
 @click.option(
@@ -246,20 +263,38 @@ def consumers_list(
     help="Allow the deletion of telegraf consumers.",
 )
 @click.option(
-    "--regex", type=str, help="Pass a regular expression to filter the consumers to be deleted."
+    "--regex",
+    type=str,
+    help="Pass a regular expression to filter the consumers to be deleted.",
 )
 @click.option(
-    "--regex-inclusive", "regex_mode", type=str, flag_value="Inclusive", help="Delete consumers that match regex."
+    "--regex-inclusive",
+    "regex_mode",
+    type=str,
+    flag_value="Inclusive",
+    help="Delete consumers that match regex.",
 )
 @click.option(
-    "--regex-exclusive", "regex_mode", default=True, type=str, flag_value="Exclusive", help="Delete consumers that do not match regex (default mode)."
+    "--regex-exclusive",
+    "regex_mode",
+    default=True,
+    type=str,
+    flag_value="Exclusive",
+    help="Delete consumers that do not match regex (default mode).",
 )
 @click.pass_context
-def consumers_delete(ctx: click.Context, regex: str | None, regex_mode: str,  delete_connectors: bool) -> None:
+def consumers_delete(
+    ctx: click.Context, regex: str | None, regex_mode: str, delete_connectors: bool
+) -> None:
     """Delete all inactive consumer groups"""
     consumers, _ = list_consumers(
         ctx.obj,
-        ListConsumerOpts(regex=regex, regex_mode=regex_mode, no_connector_filter=delete_connectors, consumer_state="Empty"),
+        ListConsumerOpts(
+            regex=regex,
+            regex_mode=regex_mode,
+            no_connector_filter=delete_connectors,
+            consumer_state="Empty",
+        ),
     )
     consumers_to_delete = [x[0] for x in consumers]
     if not len(consumers_to_delete):

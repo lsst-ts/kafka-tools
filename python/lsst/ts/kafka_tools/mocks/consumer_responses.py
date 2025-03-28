@@ -23,7 +23,6 @@ from __future__ import annotations
 
 __all__ = [
     "delete_consumers",
-    "delete_consumers_regex"
     "list_active",
     "list_all",
     "list_all_no_filter",

@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import re
 
 from confluent_kafka import ConsumerGroupState
 from confluent_kafka.admin import ConsumerGroupListing
@@ -29,7 +30,6 @@ from confluent_kafka.admin import ConsumerGroupListing
 from .constants import ListConsumerOpts
 from .helpers import generate_admin_client
 from .type_hints import DoneAndNotDoneFutures, ScriptContext
-import re
 
 __all__ = ["delete_consumers", "list_consumers", "summarize_consumers"]
 

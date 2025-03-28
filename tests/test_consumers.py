@@ -78,20 +78,40 @@ def test_list_consumers(mock_gen_admin_client: MagicMock) -> None:
     assert result.stdout == mcr.list_inactive
 
     result = runner.invoke(
-            main, ["consumers", "--timeout", 1, "local", "list", "--regex", "1$"]
-        )
+        main, ["consumers", "--timeout", 1, "local", "list", "--regex", "1$"]
+    )
     assert result.exit_code == 0
     assert result.stdout == mcr.list_regex_exclusive
 
     result = runner.invoke(
-            main, ["consumers", "--timeout", 1, "local", "list", "--regex", "1$", "--regex-exclusive"]
-        )
+        main,
+        [
+            "consumers",
+            "--timeout",
+            1,
+            "local",
+            "list",
+            "--regex",
+            "1$",
+            "--regex-exclusive",
+        ],
+    )
     assert result.exit_code == 0
     assert result.stdout == mcr.list_regex_exclusive
 
     result = runner.invoke(
-            main, ["consumers", "--timeout", 1, "local", "list", "--regex", "1$", "--regex-inclusive"]
-        )
+        main,
+        [
+            "consumers",
+            "--timeout",
+            1,
+            "local",
+            "list",
+            "--regex",
+            "1$",
+            "--regex-inclusive",
+        ],
+    )
     assert result.exit_code == 0
     assert result.stdout == mcr.list_regex_inclusive
 
@@ -114,24 +134,44 @@ def test_delete_consumers(mock_gen_admin_client: MagicMock) -> None:
     assert result.exit_code == 0
     assert result.stdout == mcr.delete_consumers
 
-    result = runner.invoke(main,["consumers", "--timeout", 1, "local", "delete"])
+    result = runner.invoke(main, ["consumers", "--timeout", 1, "local", "delete"])
     assert result.exit_code == 0
     assert result.stdout == mcr.delete_consumers
 
     result = runner.invoke(
-            main, ["consumers", "--timeout", 1, "local", "delete", "--regex", "3$", "--regex-inclusive"]
-        )
+        main,
+        [
+            "consumers",
+            "--timeout",
+            1,
+            "local",
+            "delete",
+            "--regex",
+            "3$",
+            "--regex-inclusive",
+        ],
+    )
     assert result.exit_code == 0
     assert result.stdout == mcr.delete_consumers_regex_inclusive
 
     result = runner.invoke(
-            main, ["consumers", "--timeout", 1, "local", "delete", "--regex", "consumer1*", "--regex-exclusive"]
-        )
+        main,
+        [
+            "consumers",
+            "--timeout",
+            1,
+            "local",
+            "delete",
+            "--regex",
+            "consumer1*",
+            "--regex-exclusive",
+        ],
+    )
     assert result.exit_code == 0
     assert result.stdout == mcr.delete_consumers_regex_exclusive
 
     result = runner.invoke(
-            main, ["consumers", "--timeout", 1, "local", "delete", "--regex", "consumer1*"]
-        )
+        main, ["consumers", "--timeout", 1, "local", "delete", "--regex", "consumer1*"]
+    )
     assert result.exit_code == 0
     assert result.stdout == mcr.delete_consumers_regex_exclusive
