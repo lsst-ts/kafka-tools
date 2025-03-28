@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import re
 
 from confluent_kafka import ConsumerGroupState
 from confluent_kafka.admin import ConsumerGroupListing
@@ -112,7 +113,8 @@ def list_consumers(
         states.append(ConsumerGroupState.STABLE)
     if opts.consumer_state in ("All", "Empty"):
         states.append(ConsumerGroupState.EMPTY)
-
+    if opts.regex is not None:
+        regex = re.compile(repr(opts.regex)[1:-1])
     consumers_task = client.list_consumer_groups(states=set(states))
     concurrent.futures.wait([consumers_task], timeout=timeout)
     consumers = _filter_telegraph_consumers(
@@ -124,7 +126,13 @@ def list_consumers(
         name = consumer.group_id
         if len(name) > max_length:
             max_length = len(name)
-        compact_list.append((name, consumer.state.name))
+        if opts.regex is not None:
+            if opts.regex_mode in "Inclusive" and regex.search(name) is not None:
+                compact_list.append((name, consumer.state.name))
+            if opts.regex_mode in "Exclusive" and regex.search(name) is None:
+                compact_list.append((name, consumer.state.name))
+        else:
+            compact_list.append((name, consumer.state.name))
 
     return compact_list, max_length
 
