@@ -22,7 +22,6 @@
 from __future__ import annotations
 
 import concurrent.futures
-import logging
 import os
 import re
 
@@ -144,5 +143,4 @@ def set_partitions_topics(
     client = generate_admin_client(ctxobj["site"])
     topics_modified = client.create_partitions(telemetry_topics)
     results = concurrent.futures.wait(list(topics_modified.values()))
-    logging.error(results.done)
     return (results.done, results.not_done)
