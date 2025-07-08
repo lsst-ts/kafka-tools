@@ -24,17 +24,41 @@ from __future__ import annotations
 import re
 from concurrent.futures import Future
 
-from confluent_kafka.admin import ClusterMetadata, ConfigEntry, ConfigSource
+from confluent_kafka.admin import (
+    ClusterMetadata,
+    ConfigEntry,
+    ConfigSource,
+    ConsumerGroupDescription,
+)
 
 from .constants import ListTopicsOpts
 
 __all__ = [
+    "consumer_descriptions",
     "consumer_summary",
     "filtered_topics",
     "list_broker_configs",
     "summerize_deletion",
     "two_column_table",
 ]
+
+
+def consumer_descriptions(descrs: list[ConsumerGroupDescription]) -> None:
+    """Print consumer descriptions.
+
+    Parameters
+    ----------
+    descrs : list[ConsumerGroupDescription]
+        The list of consumer descriptions.
+    """
+    for descr in descrs:
+        print(descr.group_id)
+        print("Topics:")
+        for member in descr.members:
+            topics = sorted({x.topic for x in member.assignment.topic_partitions})
+            for topic in topics:
+                print(topic)
+        print()
 
 
 def consumer_summary(summary: dict[str, int]) -> None:

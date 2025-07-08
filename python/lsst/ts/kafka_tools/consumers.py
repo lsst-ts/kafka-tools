@@ -25,13 +25,18 @@ import concurrent.futures
 import re
 
 from confluent_kafka import ConsumerGroupState
-from confluent_kafka.admin import ConsumerGroupListing
+from confluent_kafka.admin import ConsumerGroupDescription, ConsumerGroupListing
 
 from .constants import ListConsumerOpts
 from .helpers import generate_admin_client
 from .type_hints import DoneAndNotDoneFutures, ScriptContext
 
-__all__ = ["delete_consumers", "list_consumers", "summarize_consumers"]
+__all__ = [
+    "delete_consumers",
+    "describe_consumers",
+    "list_consumers",
+    "summarize_consumers",
+]
 
 
 def _filter_telegraph_consumers(
@@ -86,6 +91,31 @@ def delete_consumers(
         list(consumers_to_delete.values()), timeout=timeout
     )
     return (results.done, results.not_done)
+
+
+def describe_consumers(
+    ctxobj: ScriptContext, consumers: list[str]
+) -> list[ConsumerGroupDescription]:
+    """Describe the requested consumer groups.
+
+    Parameters
+    ----------
+    ctxobj : ScriptContext
+        The context object from the CLI invocation.
+    consumers : list[str]
+        The list of consumer groups to describe.
+
+    Returns
+    -------
+    list[ConsumerGroupDescription]
+        The list of consumer group descriptions.
+    """
+    client = generate_admin_client(ctxobj["site"])
+    timeout = ctxobj["timeout"] / 1000.0
+
+    consumer_descrs_task = client.describe_consumer_groups(consumers)
+    concurrent.futures.wait(list(consumer_descrs_task.values()), timeout=timeout)
+    return [x.result() for x in consumer_descrs_task.values()]
 
 
 def list_consumers(
