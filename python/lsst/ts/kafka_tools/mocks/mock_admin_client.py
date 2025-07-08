@@ -22,14 +22,17 @@
 import concurrent.futures
 from typing import Any
 
-from confluent_kafka import ConsumerGroupState
+from confluent_kafka import ConsumerGroupState, TopicPartition
 from confluent_kafka.admin import (
     ClusterMetadata,
     ConfigEntry,
     ConfigResource,
     ConfigSource,
+    ConsumerGroupDescription,
     ConsumerGroupListing,
     ListConsumerGroupsResult,
+    MemberAssignment,
+    MemberDescription,
     NewPartitions,
     PartitionMetadata,
     TopicMetadata,
@@ -44,6 +47,7 @@ class MockAdminClient:
         """Class constructor."""
         self.cluster_md = ClusterMetadata()
         self.cgl: list[ConsumerGroupListing] = []
+        self.cgd: list[ConsumerGroupDescription] = []
         self.empty_consumers: list[str] = []
         self.broker_config: dict[str, ConfigEntry] = {}
         self._create_topics()
@@ -97,6 +101,58 @@ class MockAdminClient:
         ]
         self.empty_consumers = [x.group_id for x in cgle]
         self.cgl.extend(cgle)
+
+        host = "/10.42.6.34"
+        cg_md_cid1 = "consumer1"
+        cg_md_mid1 = f"{cg_md_cid1}-{cg_md_cid1}"
+        ma1 = [
+            TopicPartition("topic1"),
+            TopicPartition("topic2"),
+            TopicPartition("topic3"),
+        ]
+        mdl1 = [
+            MemberDescription(
+                client_id=cg_md_cid1,
+                member_id=cg_md_mid1,
+                host=host,
+                assignment=MemberAssignment(ma1),
+            )
+        ]
+
+        cg_md_cid2 = "consumer5"
+        cg_md_mid2 = f"{cg_md_cid2}-{cg_md_cid2}"
+        ma2 = [
+            TopicPartition("lsst.sal.ATAOS.logevent_heartbeat"),
+            TopicPartition("lsst.sal.ATAOS.timestamp"),
+        ]
+        mdl2 = [
+            MemberDescription(
+                client_id=cg_md_cid2,
+                member_id=cg_md_mid2,
+                host=host,
+                assignment=MemberAssignment(ma2),
+            )
+        ]
+
+        cgds = [
+            ConsumerGroupDescription(
+                group_id=cg_md_cid1,
+                is_simple_consumer_group=True,
+                members=mdl1,
+                partition_assignor=None,
+                state=ConsumerGroupState.STABLE,
+                coordinator=None,
+            ),
+            ConsumerGroupDescription(
+                group_id=cg_md_cid2,
+                is_simple_consumer_group=True,
+                members=mdl2,
+                partition_assignor=None,
+                state=ConsumerGroupState.STABLE,
+                coordinator=None,
+            ),
+        ]
+        self.cgd.extend(cgds)
 
     def _create_topics(self) -> None:
         """Create topics."""
@@ -168,6 +224,17 @@ class MockAdminClient:
             f: concurrent.futures.Future = concurrent.futures.Future()
             f.set_result(self.broker_config)
             result[resource] = f
+        return result
+
+    def describe_consumer_groups(
+        self, group_ids: list[str]
+    ) -> dict[str, concurrent.futures.Future]:
+        """Describe consumer groups."""
+        result = {}
+        for group_id in group_ids:
+            f: concurrent.futures.Future = concurrent.futures.Future()
+            f.set_result(next((x for x in self.cgd if x.group_id == group_id), None))
+            result[group_id] = f
         return result
 
     def incremental_alter_configs(

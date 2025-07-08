@@ -102,3 +102,23 @@ delete_consumers_regex_inclusive = """Found 1 consumers to delete
 
 delete_consumers_regex_exclusive = """No consumers to delete.
 """
+
+describe_consumers = """consumer1
+Topics:
+topic1
+topic2
+topic3
+
+consumer5
+Topics:
+lsst.sal.ATAOS.logevent_heartbeat
+lsst.sal.ATAOS.timestamp
+
+"""
+
+describe_consumers_single = """consumer5
+Topics:
+lsst.sal.ATAOS.logevent_heartbeat
+lsst.sal.ATAOS.timestamp
+
+"""
