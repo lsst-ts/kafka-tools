@@ -211,3 +211,33 @@ def test_describe_consumers(mock_gen_admin_client: MagicMock) -> None:
     )
     assert result.exit_code == 0
     assert result.stdout == mcr.describe_consumers_single
+
+    result = runner.invoke(
+        main,
+        [
+            "consumers",
+            "--timeout",
+            1,
+            "local",
+            "describe",
+            "--summary",
+            "consumer1,consumer5",
+        ],
+    )
+    assert result.exit_code == 0
+    assert result.stdout == mcr.describe_consumers_summary
+
+    result = runner.invoke(
+        main,
+        [
+            "consumers",
+            "--timeout",
+            1,
+            "local",
+            "describe",
+            "--summary",
+            "consumer5",
+        ],
+    )
+    assert result.exit_code == 0
+    assert result.stdout == mcr.describe_consumers_summary_single

@@ -122,3 +122,16 @@ lsst.sal.ATAOS.logevent_heartbeat
 lsst.sal.ATAOS.timestamp
 
 """
+
+describe_consumers_summary = """consumer1
+Num Topics = 3
+
+consumer5
+Num Topics = 2
+
+"""
+
+describe_consumers_summary_single = """consumer5
+Num Topics = 2
+
+"""

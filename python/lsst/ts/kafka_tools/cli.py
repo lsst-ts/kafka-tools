@@ -312,15 +312,20 @@ def consumers_delete(
 
 @consumers.command("describe")
 @click.argument("consumers", type=str)
+@click.option(
+    "--summary",
+    is_flag=True,
+    help="Summarize the consumers groups by just listing the number of topics.",
+)
 @click.pass_context
-def consumers_describe(ctx: click.Context, consumers: str) -> None:
+def consumers_describe(ctx: click.Context, consumers: str, summary: bool) -> None:
     """Describe the given set of consumer groups."""
     if "," in consumers:
         consumer_list = consumers.split(",")
     else:
         consumer_list = [consumers]
     descrs = describe_consumers(ctx.obj, consumer_list)
-    consumer_descriptions(descrs)
+    consumer_descriptions(descrs, summary)
 
 
 @main.group()
