@@ -175,3 +175,69 @@ def test_delete_consumers(mock_gen_admin_client: MagicMock) -> None:
     )
     assert result.exit_code == 0
     assert result.stdout == mcr.delete_consumers_regex_exclusive
+
+
+@patch("lsst.ts.kafka_tools.consumers.generate_admin_client", spec=True)
+def test_describe_consumers(mock_gen_admin_client: MagicMock) -> None:
+    mac = MockAdminClient()
+    mock_gen_admin_client.return_value = mac
+
+    runner = CliRunner()
+
+    result = runner.invoke(
+        main,
+        [
+            "consumers",
+            "--timeout",
+            1,
+            "local",
+            "describe",
+            "consumer1,consumer5",
+        ],
+    )
+    assert result.exit_code == 0
+    assert result.stdout == mcr.describe_consumers
+
+    result = runner.invoke(
+        main,
+        [
+            "consumers",
+            "--timeout",
+            1,
+            "local",
+            "describe",
+            "consumer5",
+        ],
+    )
+    assert result.exit_code == 0
+    assert result.stdout == mcr.describe_consumers_single
+
+    result = runner.invoke(
+        main,
+        [
+            "consumers",
+            "--timeout",
+            1,
+            "local",
+            "describe",
+            "--summary",
+            "consumer1,consumer5",
+        ],
+    )
+    assert result.exit_code == 0
+    assert result.stdout == mcr.describe_consumers_summary
+
+    result = runner.invoke(
+        main,
+        [
+            "consumers",
+            "--timeout",
+            1,
+            "local",
+            "describe",
+            "--summary",
+            "consumer5",
+        ],
+    )
+    assert result.exit_code == 0
+    assert result.stdout == mcr.describe_consumers_summary_single

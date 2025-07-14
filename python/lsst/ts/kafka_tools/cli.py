@@ -30,9 +30,15 @@ import click
 from .auth import create_properties_files
 from .configs import show_broker_config
 from .constants import SITES, ListConsumerOpts, ListTopicsOpts
-from .consumers import delete_consumers, list_consumers, summarize_consumers
+from .consumers import (
+    delete_consumers,
+    describe_consumers,
+    list_consumers,
+    summarize_consumers,
+)
 from .helpers import acknowledge_deletion
 from .print_helpers import (
+    consumer_descriptions,
     consumer_summary,
     filtered_topics,
     list_broker_configs,
@@ -302,6 +308,24 @@ def consumers_delete(
         return
     done, not_done = delete_consumers(ctx.obj, consumers_to_delete)
     summerize_deletion("consumers", done, not_done)
+
+
+@consumers.command("describe")
+@click.argument("consumers", type=str)
+@click.option(
+    "--summary",
+    is_flag=True,
+    help="Summarize the consumers groups by just listing the number of topics.",
+)
+@click.pass_context
+def consumers_describe(ctx: click.Context, consumers: str, summary: bool) -> None:
+    """Describe the given set of consumer groups."""
+    if "," in consumers:
+        consumer_list = consumers.split(",")
+    else:
+        consumer_list = [consumers]
+    descrs = describe_consumers(ctx.obj, consumer_list)
+    consumer_descriptions(descrs, summary)
 
 
 @main.group()
