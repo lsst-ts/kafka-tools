@@ -24,8 +24,11 @@ import pathlib
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
+from confluent_kafka import TopicPartition
 from lsst.ts.kafka_tools.cli import main
+from lsst.ts.kafka_tools.mocks.ceph_events import ceph_event_single_put
 from lsst.ts.kafka_tools.mocks.mock_admin_client import MockAdminClient
+from lsst.ts.kafka_tools.mocks.mock_message import MockMessage
 from lsst.ts.kafka_tools.mocks.topic_responses import (
     csc_filtered_topics,
     list_topics,
@@ -130,3 +133,53 @@ def test_topics_partitions(mock_gen_admin_client: MagicMock) -> None:
         )
         assert result.exit_code == 0
         assert result.stdout == partition_expansion
+
+
+@patch("lsst.ts.kafka_tools.topics.Consumer")
+@patch("lsst.ts.kafka_tools.topics.create_config")
+def test_topics_query(
+    mock_create_config: MagicMock,
+    mock_consumer_cls: MagicMock,
+) -> None:
+
+    mock_create_config.return_value = {}
+    consumer = MagicMock()
+    mock_consumer_cls.return_value = consumer
+    partition = MagicMock()
+    partition.id = 0
+
+    consumer.list_topics.return_value.topics = {
+        "lsst.s3.raw.lsstcam": MagicMock(partitions={0: partition})
+    }
+    consumer.offsets_for_times.return_value = [
+        TopicPartition("lsst.s3.raw.lsstcam", 0, 0)
+    ]
+
+    inside_window_ts = 1768282330000  # 2026-01-13T05:32:10 UTC
+    after_window_ts = inside_window_ts + 10 * 60 * 1000  # +10 minutes
+
+    consumer.poll.side_effect = [
+        MockMessage(inside_window_ts, ceph_event_single_put),  # should be included
+        MockMessage(after_window_ts, ceph_event_single_put),  # should not
+        None,  # end of messages
+    ]
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            main,
+            [
+                "topics",
+                "local",
+                "query",
+                "2026-01-13-05:32",
+                "2026-01-13-05:33",
+                "lsst.s3.raw.lsstcam",
+            ],
+        )
+
+        assert result.exit_code == 0
+
+        # only one message should appear
+        assert result.stdout.count("ObjectCreated:Put") == 1
+        assert "LSSTCam/file.fits" in result.stdout
