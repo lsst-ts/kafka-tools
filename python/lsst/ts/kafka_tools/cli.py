@@ -45,7 +45,13 @@ from .print_helpers import (
     summerize_deletion,
     two_column_table,
 )
-from .topics import delete_topics, filter_topics, get_topics, set_partitions_topics, query_topic_time_range
+from .topics import (
+    delete_topics,
+    filter_topics,
+    get_topics,
+    query_topic_time_range,
+    set_partitions_topics,
+)
 
 __all__ = ["auth", "auth_create_prop_files", "main", "topics", "topics_list"]
 
@@ -173,6 +179,7 @@ def topics_set_partitions(ctx: click.Context, csc: str, number: str) -> None:
     print(f"Found {num_done + num_not_done} topics to modify")
     print(f"{num_done} modified successfully, {num_not_done} not successfully modified")
 
+
 @topics.command("query")
 @click.argument("start", type=str)
 @click.argument("end", type=str)
@@ -206,11 +213,10 @@ def topics_query(
     )
 
     for r in records:
-        click.echo(
-            f"{topic} ts={r['timestamp_ms']} \n value={r['value']}"
-        )
+        click.echo(f"{topic} ts={r['timestamp_ms']} \n value={r['value']}")
 
     click.echo(f"\nReturned {len(records)} message(s)")
+
 
 @main.group()
 @click.argument("site", type=click.Choice(SITES, case_sensitive=False))
