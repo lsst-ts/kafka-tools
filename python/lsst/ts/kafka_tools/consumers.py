@@ -23,9 +23,15 @@ from __future__ import annotations
 
 import concurrent.futures
 import re
+from typing import Any, Optional
 
-from confluent_kafka import ConsumerGroupState
-from confluent_kafka.admin import ConsumerGroupDescription, ConsumerGroupListing
+from confluent_kafka import OFFSET_INVALID, ConsumerGroupState, TopicPartition
+from confluent_kafka.admin import (
+    ConsumerGroupDescription,
+    ConsumerGroupListing,
+    OffsetSpec,
+    _ConsumerGroupTopicPartitions,
+)
 
 from .constants import ListConsumerOpts
 from .helpers import generate_admin_client
@@ -36,6 +42,7 @@ __all__ = [
     "describe_consumers",
     "list_consumers",
     "summarize_consumers",
+    "consumer_group_lag",
 ]
 
 
@@ -210,3 +217,116 @@ def summarize_consumers(
     num_empty_consumers = len(empty_consumers)
 
     return {"active": num_stable_consumers, "inactive": num_empty_consumers}
+
+
+def consumer_group_lag(
+    ctxobj: ScriptContext,
+    group_id: str,
+    *,
+    timeout_ms: Optional[int] = None,
+) -> dict[str, Any]:
+    """
+    Compute total lag for a consumer group.
+
+    Lag = log_end_offset - committed_offset
+
+    Returns
+    -------
+    dict:
+        {
+            "group_id": str,
+            "total_lag": int,
+            "partitions": [
+                {
+                    "topic": str,
+                    "partition": int,
+                    "committed": int | None,
+                    "end_offset": int | None,
+                    "lag": int | None
+                },
+                ...
+            ]
+        }
+    """
+    client = generate_admin_client(ctxobj["site"])
+    timeout_s = (timeout_ms if timeout_ms is not None else ctxobj["timeout"]) / 1000.0
+
+    # get committed offsets
+    request = _ConsumerGroupTopicPartitions(group_id)
+    offsets_futures = client.list_consumer_group_offsets([request])
+    concurrent.futures.wait(list(offsets_futures.values()), timeout=timeout_s)
+    offsets_result = offsets_futures[group_id].result()
+    print(vars(offsets_result))
+    offsets = offsets_result.topic_partitions
+
+    if not offsets:
+        print("No offsets")
+        return {
+            "group_id": group_id,
+            "total_lag": 0,
+            "partitions": [],
+        }
+
+    # fetch latest offsets
+    latest_requests = {}
+    committed_map = {}
+
+    for tp in offsets:
+        committed = tp.offset
+
+        if committed is None or committed < 0:
+            committed = OFFSET_INVALID
+
+        committed_map[(tp.topic, tp.partition)] = committed
+
+        latest_requests[TopicPartition(tp.topic, tp.partition)] = OffsetSpec.latest()
+
+    latest_futures = client.list_offsets(latest_requests)
+    concurrent.futures.wait(list(latest_futures.values()), timeout=timeout_s)
+
+    partitions = []
+    total_lag = 0
+
+    for req_tp, fut in latest_futures.items():
+        topic = req_tp.topic
+        partition = req_tp.partition
+        committed = committed_map.get((topic, partition), OFFSET_INVALID)
+
+        try:
+            info = fut.result()
+            end_offset = getattr(info, "offset", OFFSET_INVALID)
+        except Exception:
+            partitions.append(
+                {
+                    "topic": topic,
+                    "partition": partition,
+                    "committed": None,
+                    "end_offset": None,
+                    "lag": None,
+                }
+            )
+            continue
+
+        if committed == OFFSET_INVALID or end_offset == OFFSET_INVALID:
+            lag = None
+        else:
+            lag = max(0, end_offset - committed)
+            total_lag += lag
+
+        partitions.append(
+            {
+                "topic": topic,
+                "partition": partition,
+                "committed": None if committed == OFFSET_INVALID else committed,
+                "end_offset": None if end_offset == OFFSET_INVALID else end_offset,
+                "lag": lag,
+            }
+        )
+
+    partitions.sort(key=lambda x: (x["topic"], x["partition"]))
+
+    return {
+        "group_id": group_id,
+        "total_lag": total_lag,
+        "partitions": partitions,
+    }

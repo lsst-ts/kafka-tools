@@ -31,6 +31,7 @@ from .auth import create_properties_files
 from .configs import show_broker_config
 from .constants import SITES, ListConsumerOpts, ListTopicsOpts
 from .consumers import (
+    consumer_group_lag,
     delete_consumers,
     describe_consumers,
     list_consumers,
@@ -370,6 +371,23 @@ def consumers_describe(ctx: click.Context, consumers: str, summary: bool) -> Non
         consumer_list = [consumers]
     descrs = describe_consumers(ctx.obj, consumer_list)
     consumer_descriptions(descrs, summary)
+
+
+@consumers.command("lag")
+@click.argument("group-id", type=str)
+@click.pass_context
+def consumers_lag(ctx: click.Context, group_id: str) -> None:
+    """Show the total lag for a consumer group."""
+    result = consumer_group_lag(ctx.obj, group_id)
+    click.echo(f"Group: {result['group_id']}")
+    for p in result["partitions"]:
+        click.echo(
+            f"  {p['topic']}[{p['partition']}]"
+            f"  committed={p['committed']}"
+            f"  end_offset={p['end_offset']}"
+            f"  lag={p['lag']}"
+        )
+    click.echo(f"Total lag: {result['total_lag']}")
 
 
 @main.group()
