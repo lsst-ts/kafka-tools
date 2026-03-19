@@ -43,6 +43,7 @@ __all__ = [
     "list_consumers",
     "summarize_consumers",
     "consumer_group_lag",
+    "consumer_groups_lag_by_prefix",
 ]
 
 
@@ -221,7 +222,7 @@ def summarize_consumers(
 
 def consumer_group_lag(
     ctxobj: ScriptContext,
-    group_id: str,
+    group_id: str | None,
     *,
     timeout_ms: Optional[int] = None,
 ) -> dict[str, Any]:
@@ -256,7 +257,7 @@ def consumer_group_lag(
     offsets_futures = client.list_consumer_group_offsets([request])
     concurrent.futures.wait(list(offsets_futures.values()), timeout=timeout_s)
     offsets_result = offsets_futures[group_id].result()
-    print(vars(offsets_result))
+    # print(vars(offsets_result))
     offsets = offsets_result.topic_partitions
 
     if not offsets:
@@ -329,4 +330,148 @@ def consumer_group_lag(
         "group_id": group_id,
         "total_lag": total_lag,
         "partitions": partitions,
+    }
+
+
+def consumer_groups_lag_by_prefix(
+    ctxobj: ScriptContext,
+    prefix: str,
+    *,
+    timeout_ms: Optional[int] = None,
+) -> dict[str, Any]:
+    """Compute lag for all consumer groups matching a prefix.
+
+    Parameters
+    ----------
+    ctxobj : ScriptContext
+        The context object from the CLI invocation.
+    prefix : str
+        Only consumer groups whose group_id starts with this string are
+        included.
+    timeout_ms : int, optional
+        Timeout in milliseconds. Falls back to ``ctxobj["timeout"]``.
+
+    Returns
+    -------
+    dict:
+        {
+            "prefix": str,
+            "total_lag": int,
+            "groups": [
+                <consumer_group_lag result>,
+                ...
+            ]
+        }
+    """
+    client = generate_admin_client(ctxobj["site"])
+    timeout_s = (timeout_ms if timeout_ms is not None else ctxobj["timeout"]) / 1000.0
+
+    groups_task = client.list_consumer_groups()
+    concurrent.futures.wait([groups_task], timeout=timeout_s)
+    all_groups = groups_task.result().valid
+
+    matching = [g.group_id for g in all_groups if g.group_id.startswith(prefix)]
+
+    if not matching:
+        return {"prefix": prefix, "total_lag": 0, "groups": []}
+
+    # list_consumer_group_offsets per consumer group,
+    # collect all futures before waiting.
+    all_offsets_futures: dict[str, Any] = {}
+    for gid in matching:
+        fut_map = client.list_consumer_group_offsets(
+            [_ConsumerGroupTopicPartitions(gid)]
+        )
+        all_offsets_futures[gid] = fut_map[gid]
+
+    concurrent.futures.wait(list(all_offsets_futures.values()), timeout=timeout_s)
+
+    # per-group committed-offset maps and collect topic-partitions.
+    group_committed: dict[str, dict[tuple[str, int], int]] = {}
+    all_tp_requests: dict[TopicPartition, OffsetSpec] = {}
+
+    for gid in matching:
+        offsets = all_offsets_futures[gid].result().topic_partitions
+        committed: dict[tuple[str, int], int] = {}
+        for tp in offsets:
+            c = (
+                tp.offset
+                if (tp.offset is not None and tp.offset >= 0)
+                else OFFSET_INVALID
+            )
+            committed[(tp.topic, tp.partition)] = c
+            all_tp_requests[TopicPartition(tp.topic, tp.partition)] = (
+                OffsetSpec.latest()
+            )
+        group_committed[gid] = committed
+
+    # fetch in batch the latest offsets for every topic-partition.
+    latest_futures = client.list_offsets(all_tp_requests)
+    concurrent.futures.wait(list(latest_futures.values()), timeout=timeout_s)
+
+    end_offsets: dict[tuple[str, int], Optional[int]] = {}
+    for req_tp, fut in latest_futures.items():
+        try:
+            info = fut.result()
+            end_offsets[(req_tp.topic, req_tp.partition)] = getattr(
+                info, "offset", OFFSET_INVALID
+            )
+        except Exception:
+            end_offsets[(req_tp.topic, req_tp.partition)] = None
+
+    # Compute per-group lag.
+    results = []
+    combined_lag = 0
+
+    for gid in matching:
+        committed = group_committed.get(gid, {})
+        if not committed:
+            results.append({"group_id": gid, "total_lag": 0, "partitions": []})
+            continue
+
+        partitions = []
+        total_lag = 0
+
+        for (topic, partition), c in sorted(committed.items()):
+            end = end_offsets.get((topic, partition), OFFSET_INVALID)
+            if end is None:
+                partitions.append(
+                    {
+                        "topic": topic,
+                        "partition": partition,
+                        "committed": None,
+                        "end_offset": None,
+                        "lag": None,
+                    }
+                )
+                continue
+
+            committed_val = None if c == OFFSET_INVALID else c
+            end_val = None if end == OFFSET_INVALID else end
+
+            if committed_val is None or end_val is None:
+                lag = None
+            else:
+                lag = max(0, end_val - committed_val)
+                total_lag += lag
+
+            partitions.append(
+                {
+                    "topic": topic,
+                    "partition": partition,
+                    "committed": committed_val,
+                    "end_offset": end_val,
+                    "lag": lag,
+                }
+            )
+
+        combined_lag += total_lag
+        results.append(
+            {"group_id": gid, "total_lag": total_lag, "partitions": partitions}
+        )
+
+    return {
+        "prefix": prefix,
+        "total_lag": combined_lag,
+        "groups": results,
     }
