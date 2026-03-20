@@ -32,6 +32,7 @@ from .configs import show_broker_config
 from .constants import SITES, ListConsumerOpts, ListTopicsOpts
 from .consumers import (
     consumer_group_lag,
+    consumer_groups_lag_by_prefix,
     delete_consumers,
     describe_consumers,
     list_consumers,
@@ -374,20 +375,71 @@ def consumers_describe(ctx: click.Context, consumers: str, summary: bool) -> Non
 
 
 @consumers.command("lag")
-@click.argument("group-id", type=str)
+@click.argument("group-id", type=str, required=False, default=None)
+@click.option(
+    "--telegraf",
+    "mode",
+    flag_value="telegraf",
+    help="Show combined lag for all consumer groups starting with 'telegraf-kafka-consumer'.",
+)
+@click.option(
+    "--love-producer",
+    "mode",
+    flag_value="love-producer",
+    help="Show combined lag for all consumer groups starting with 'saluser@love-producer'.",
+)
+@click.option(
+    "--summary",
+    is_flag=True,
+    help="Show only per-group total lag and combined lag. Ignored when querying a single group.",
+)
 @click.pass_context
-def consumers_lag(ctx: click.Context, group_id: str) -> None:
-    """Show the total lag for a consumer group."""
-    result = consumer_group_lag(ctx.obj, group_id)
-    click.echo(f"Group: {result['group_id']}")
-    for p in result["partitions"]:
-        click.echo(
-            f"  {p['topic']}[{p['partition']}]"
-            f"  committed={p['committed']}"
-            f"  end_offset={p['end_offset']}"
-            f"  lag={p['lag']}"
+def consumers_lag(
+    ctx: click.Context, group_id: str | None, mode: str | None, summary: bool
+) -> None:
+    """Show the total lag for a consumer group.
+
+    Provide GROUP_ID to query a single group, or use --telegraf /
+    --love-producer to aggregate across all matching groups.
+    """
+    if mode is not None and group_id is not None:
+        raise click.UsageError(
+            "Cannot use GROUP_ID together with --telegraf or --love-producer."
         )
-    click.echo(f"Total lag: {result['total_lag']}")
+    if mode is None and group_id is None:
+        raise click.UsageError(
+            "Provide a GROUP_ID or use --telegraf / --love-producer."
+        )
+
+    if mode is not None:
+        prefix = (
+            "telegraf-kafka-consumer" if mode == "telegraf" else "saluser@love-producer"
+        )
+        result = consumer_groups_lag_by_prefix(ctx.obj, prefix)
+        for group in result["groups"]:
+            click.echo(f"\nGroup: {group['group_id']}")
+            if not summary:
+                for p in group["partitions"]:
+                    click.echo(
+                        f"  {p['topic']}[{p['partition']}]"
+                        f"  committed={p['committed']}"
+                        f"  end_offset={p['end_offset']}"
+                        f"  lag={p['lag']}"
+                    )
+            click.echo(f"  Group total lag: {group['total_lag']}")
+        click.echo(f"\nCombined lag for '{prefix}*': {result['total_lag']}")
+    else:
+        result = consumer_group_lag(ctx.obj, group_id)
+        click.echo(f"Group: {result['group_id']}")
+        if not summary:
+            for p in result["partitions"]:
+                click.echo(
+                    f"  {p['topic']}[{p['partition']}]"
+                    f"  committed={p['committed']}"
+                    f"  end_offset={p['end_offset']}"
+                    f"  lag={p['lag']}"
+                )
+        click.echo(f"Total lag: {result['total_lag']}")
 
 
 @main.group()

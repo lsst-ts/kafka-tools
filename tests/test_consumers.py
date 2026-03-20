@@ -24,6 +24,10 @@ from unittest.mock import MagicMock, patch
 import lsst.ts.kafka_tools.mocks.consumer_responses as mcr
 from click.testing import CliRunner
 from lsst.ts.kafka_tools.cli import main
+from lsst.ts.kafka_tools.consumers import (
+    consumer_group_lag,
+    consumer_groups_lag_by_prefix,
+)
 from lsst.ts.kafka_tools.mocks.mock_admin_client import MockAdminClient
 
 
@@ -241,3 +245,60 @@ def test_describe_consumers(mock_gen_admin_client: MagicMock) -> None:
     )
     assert result.exit_code == 0
     assert result.stdout == mcr.describe_consumers_summary_single
+
+
+@patch("lsst.ts.kafka_tools.consumers.generate_admin_client", spec=True)
+def test_consumer_group_lag(mock_gen_admin_client: MagicMock) -> None:
+    mock_gen_admin_client.return_value = MockAdminClient()
+    ctxobj = {"site": "local", "timeout": 1000}
+
+    # Group with committed offsets
+    result = consumer_group_lag(ctxobj, "consumer1")
+    assert result["group_id"] == "consumer1"
+    assert result["total_lag"] == 5
+    assert len(result["partitions"]) == 2
+    by_key = {(p["topic"], p["partition"]): p for p in result["partitions"]}
+    assert by_key[("topic1", 0)] == {
+        "topic": "topic1",
+        "partition": 0,
+        "committed": 5,
+        "end_offset": 10,
+        "lag": 5,
+    }
+    assert by_key[("topic2", 0)] == {
+        "topic": "topic2",
+        "partition": 0,
+        "committed": 3,
+        "end_offset": 3,
+        "lag": 0,
+    }
+
+    # Group with no committed offsets
+    result = consumer_group_lag(ctxobj, "consumer5")
+    assert result == {"group_id": "consumer5", "total_lag": 0, "partitions": []}
+
+
+@patch("lsst.ts.kafka_tools.consumers.generate_admin_client", spec=True)
+def test_consumer_groups_lag_by_prefix(mock_gen_admin_client: MagicMock) -> None:
+    mock_gen_admin_client.return_value = MockAdminClient()
+    ctxobj = {"site": "local", "timeout": 1000}
+
+    # Prefix that matches nothing
+    result = consumer_groups_lag_by_prefix(ctxobj, "nonexistent")
+    assert result == {"prefix": "nonexistent", "total_lag": 0, "groups": []}
+
+    # "consumer1" matches consumer1, consumer10, consumer11, consumer13
+    result = consumer_groups_lag_by_prefix(ctxobj, "consumer1")
+    assert result["prefix"] == "consumer1"
+    # Only consumer1 has committed offsets, so total lag is 5
+    assert result["total_lag"] == 5
+    group_ids = {g["group_id"] for g in result["groups"]}
+    assert group_ids == {"consumer1", "consumer10", "consumer11", "consumer13"}
+    consumer1_result = next(g for g in result["groups"] if g["group_id"] == "consumer1")
+    assert consumer1_result["total_lag"] == 5
+    assert len(consumer1_result["partitions"]) == 2
+    # Groups without offsets get empty partition lists
+    for gid in ("consumer10", "consumer11", "consumer13"):
+        group = next(g for g in result["groups"] if g["group_id"] == gid)
+        assert group["total_lag"] == 0
+        assert group["partitions"] == []

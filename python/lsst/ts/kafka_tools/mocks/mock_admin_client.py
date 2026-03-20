@@ -20,9 +20,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import concurrent.futures
-from typing import Any
+from typing import Any, Optional
 
-from confluent_kafka import ConsumerGroupState, TopicPartition
+from confluent_kafka import OFFSET_INVALID, ConsumerGroupState, TopicPartition
 from confluent_kafka.admin import (
     ClusterMetadata,
     ConfigEntry,
@@ -34,14 +34,35 @@ from confluent_kafka.admin import (
     MemberAssignment,
     MemberDescription,
     NewPartitions,
+    OffsetSpec,
     PartitionMetadata,
     TopicMetadata,
+    _ConsumerGroupTopicPartitions,
 )
+
+
+class _MockListOffsetsResultInfo:
+    """Simple stand-in for ListOffsetsResultInfo."""
+
+    def __init__(self, offset: int) -> None:
+        self.offset = offset
+
 
 __all__ = ["MockAdminClient"]
 
 
 class MockAdminClient:
+
+    # committed offsets: group_id -> [(topic, partition, offset), ...]
+    _mock_committed: dict[str, list[tuple[str, int, int]]] = {
+        "consumer1": [("topic1", 0, 5), ("topic2", 0, 3)],
+        "consumer2": [("topic1", 0, 8)],
+    }
+    # end (log) offsets: (topic, partition) -> offset
+    _mock_end_offsets: dict[tuple[str, int], int] = {
+        ("topic1", 0): 10,
+        ("topic2", 0): 3,
+    }
 
     def __init__(self) -> None:
         """Class constructor."""
@@ -250,14 +271,44 @@ class MockAdminClient:
         return result
 
     def list_consumer_groups(
-        self, states: set[ConsumerGroupState]
+        self, states: Optional[set[ConsumerGroupState]] = None
     ) -> concurrent.futures.Future:
         """List consumer groups."""
-        consumers = [x for x in self.cgl if x.state in states]
+        if states is None:
+            consumers = list(self.cgl)
+        else:
+            consumers = [x for x in self.cgl if x.state in states]
         lcgr = ListConsumerGroupsResult(consumers)
         f: concurrent.futures.Future = concurrent.futures.Future()
         f.set_result(lcgr)
         return f
+
+    def list_consumer_group_offsets(
+        self, requests: list[_ConsumerGroupTopicPartitions]
+    ) -> dict[str, concurrent.futures.Future]:
+        """Return committed offsets for each requested consumer group."""
+        result = {}
+        for req in requests:
+            gid = req.group_id
+            tps = [
+                TopicPartition(t, p, o) for t, p, o in self._mock_committed.get(gid, [])
+            ]
+            f: concurrent.futures.Future = concurrent.futures.Future()
+            f.set_result(_ConsumerGroupTopicPartitions(gid, tps))
+            result[gid] = f
+        return result
+
+    def list_offsets(
+        self, topic_partitions: dict[TopicPartition, OffsetSpec]
+    ) -> dict[TopicPartition, concurrent.futures.Future]:
+        """Return the latest offset for each requested topic-partition."""
+        result = {}
+        for tp in topic_partitions:
+            end = self._mock_end_offsets.get((tp.topic, tp.partition), OFFSET_INVALID)
+            f: concurrent.futures.Future = concurrent.futures.Future()
+            f.set_result(_MockListOffsetsResultInfo(end))
+            result[tp] = f
+        return result
 
     def list_topics(self) -> ClusterMetadata:
         """List topics creation."""
