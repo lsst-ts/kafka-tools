@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import pathlib
 from typing import Any, TypedDict
 
 __all__ = ["DoneAndNotDoneFutures", "ScriptContext", "ScriptOptions"]
@@ -32,6 +33,7 @@ DoneAndNotDoneFutures = tuple[
 ]
 
 
-class ScriptContext(TypedDict):
+class ScriptContext(TypedDict, total=False):
     site: str
     timeout: int
+    auth_file: pathlib.Path | None
