@@ -58,7 +58,7 @@ def delete_topics(ctxobj: ScriptContext, topics: list[str]) -> DoneAndNotDoneFut
     DoneAndNotDoneFutures
         The done and not done futures.
     """
-    client = generate_admin_client(ctxobj["site"])
+    client = generate_admin_client(ctxobj["site"], ctxobj.get("auth_file"))
 
     topics_to_delete = client.delete_topics(topics)
     results = concurrent.futures.wait(list(topics_to_delete.values()))
@@ -75,7 +75,7 @@ def filter_topics(ctxobj: ScriptContext, opts: ListTopicsOpts) -> list[str]:
     opts : ListTopicsOpts
         CLI options from the invocation.
     """
-    client = generate_admin_client(ctxobj["site"])
+    client = generate_admin_client(ctxobj["site"], ctxobj.get("auth_file"))
     result = client.list_topics()
     topics: list[str] = []
     regex = None
@@ -113,13 +113,17 @@ def get_topics(ctxobj: ScriptContext) -> list[str]:
     list[str]
         List of all the topics.
     """
-    client = generate_admin_client(ctxobj["site"])
+    client = generate_admin_client(ctxobj["site"], ctxobj.get("auth_file"))
     topics = client.list_topics()
     return topics
 
 
 def set_partitions_topics(
-    ctxobj: ScriptContext, topics: list[str], csc: str, partitions: int
+    ctxobj: ScriptContext,
+    topics: list[str],
+    partitions: int,
+    csc: str | None = None,
+    dry_run: bool = False,
 ) -> DoneAndNotDoneFutures:
     """Set partitions on CSC telemetry topics.
 
@@ -128,11 +132,13 @@ def set_partitions_topics(
     ctxobj : ScriptContext
         The context object from the CLI invocation.
     topics : list[str]
-        The list of topics to modify. May contain similarly named CSCs.
-    csc : str
-        CSC name for exact checking.
+        The list of topics to modify.
     partitions : int
         The number of partitions to set on the topics.
+    csc : str, optional
+        CSC name for exact matching. If None, no CSC filtering is applied.
+    dry_run : bool
+        If True, print affected topics without applying any changes.
 
     Returns
     -------
@@ -140,16 +146,31 @@ def set_partitions_topics(
         The done and not done futures.
     """
     telemetry_topics: list[NewPartitions] = []
+    telemetry_topic_names: list[str] = []
     for topic in topics:
         values = topic.split(".")
-        if csc != values[2]:
-            continue
-        if values[3].startswith(("ackcmd", "logevent", "command")):
-            continue
+        if len(values) >= 4 and values[1] == "sal":
+            # Old SAL format: lsst.sal.CSC.topictype_name
+            if csc is not None and csc != values[2]:
+                continue
+            if values[3].startswith(("ackcmd", "logevent", "command")):
+                continue
         else:
-            telemetry_topics.append(NewPartitions(topic, partitions))
+            # New format (no sal): lsst.CSC.topic_name
+            if csc is not None and csc != values[1]:
+                continue
+        telemetry_topic_names.append(topic)
+        telemetry_topics.append(NewPartitions(topic, partitions))
 
-    client = generate_admin_client(ctxobj["site"])
+    if dry_run:
+        print(
+            f"Would set {partitions} partition(s) on {len(telemetry_topics)} topic(s):"
+        )
+        for name in telemetry_topic_names:
+            print(f"  {name}")
+        return (set(), set())
+
+    client = generate_admin_client(ctxobj["site"], ctxobj.get("auth_file"))
     topics_modified = client.create_partitions(telemetry_topics)
     results = concurrent.futures.wait(list(topics_modified.values()))
     return (results.done, results.not_done)

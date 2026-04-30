@@ -90,11 +90,18 @@ def auth_create_prop_files(auth_dir: pathlib.Path | None) -> None:
 
 @main.group()
 @click.argument("site", type=click.Choice(SITES, case_sensitive=False))
+@click.option(
+    "--auth-file",
+    type=pathlib.Path,
+    default=None,
+    help="Override the default auth properties file for this site.",
+)
 @click.pass_context
-def topics(ctx: click.Context, site: str) -> None:
+def topics(ctx: click.Context, site: str, auth_file: pathlib.Path | None) -> None:
     """Commands for Kafka topics."""
     ctx.obj = {
         "site": site,
+        "auth_file": auth_file,
     }
 
 
@@ -167,19 +174,74 @@ def topics_delete(
 
 
 @topics.command("set-partitions")
-@click.argument("csc")
 @click.argument("number")
+@click.option(
+    "--csc", type=str, default=None, help="CSC name to filter telemetry topics."
+)
+@click.option(
+    "--topic-list",
+    type=str,
+    default=None,
+    help="Comma-delimited list of topic names to modify.",
+)
+@click.option(
+    "--topic-file",
+    type=pathlib.Path,
+    default=None,
+    help="File containing topic names to modify, one per line.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Print which topics would be modified without applying any changes.",
+)
 @click.pass_context
-def topics_set_partitions(ctx: click.Context, csc: str, number: str) -> None:
+def topics_set_partitions(
+    ctx: click.Context,
+    number: str,
+    csc: str | None,
+    topic_list: str | None,
+    topic_file: pathlib.Path | None,
+    dry_run: bool,
+) -> None:
     """Change the number of partitions on CSC telemetry topics."""
+    check_args = [csc is not None, topic_list is not None, topic_file is not None]
+    if not sum(check_args):
+        raise click.exceptions.UsageError(
+            "Must provide one of: --csc, --topic-list, or --topic-file.", ctx
+        )
+    if sum(check_args) > 1:
+        raise click.exceptions.UsageError(
+            "Cannot use --csc, --topic-list, and --topic-file simultaneously.", ctx
+        )
+
     topics = filter_topics(
-        ctx.obj, ListTopicsOpts(regex=None, name=csc, name_list=None, name_file=None)
+        ctx.obj,
+        ListTopicsOpts(
+            regex=None, name=csc, name_list=topic_list, name_file=topic_file
+        ),
     )
-    done, not_done = set_partitions_topics(ctx.obj, topics, csc, int(number))
-    num_done = len(done)
-    num_not_done = len(not_done)
-    print(f"Found {num_done + num_not_done} topics to modify")
-    print(f"{num_done} modified successfully, {num_not_done} not successfully modified")
+
+    if dry_run:
+        if csc is not None:
+            filter_desc = f"--csc {csc}"
+        elif topic_list is not None:
+            filter_desc = f"--topic-list {topic_list}"
+        else:
+            filter_desc = f"--topic-file {topic_file}"
+        print(f"Dry run: set-partitions {filter_desc} {number}")
+
+    done, not_done = set_partitions_topics(
+        ctx.obj, topics, int(number), csc=csc, dry_run=dry_run
+    )
+
+    if not dry_run:
+        num_done = len(done)
+        num_not_done = len(not_done)
+        print(f"Found {num_done + num_not_done} topics to modify")
+        print(
+            f"{num_done} modified successfully, {num_not_done} not successfully modified"
+        )
 
 
 @topics.command("query")

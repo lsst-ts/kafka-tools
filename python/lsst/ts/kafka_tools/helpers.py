@@ -64,13 +64,16 @@ def check_for_exception(out: str) -> None:
         sys.exit(254)
 
 
-def create_config(site_name: str) -> Properties:
+def create_config(site_name: str, auth_file: pathlib.Path | None = None) -> Properties:
     """Create configuration for AdminClient instance.
 
     Parameters
     ----------
     site_name : str
         The name of the accessed site.
+    auth_file : pathlib.Path, optional
+        Path to an auth properties file. Overrides the default
+        ``~/.auth/kafka-aclient-{site_name}.properties`` when provided.
 
     Returns
     -------
@@ -85,30 +88,37 @@ def create_config(site_name: str) -> Properties:
         props["sasl.password"] = os.environ["LSST_KAFKA_SECURITY_PASSWORD"]
         props["bootstrap.servers"] = os.environ["LSST_KAFKA_BROKER_ADDR"]
     else:
-        auth_config_file = (
-            pathlib.Path("~/").expanduser()
-            / ".auth"
-            / f"kafka-aclient-{site_name}.properties"
-        )
+        if auth_file is not None:
+            auth_config_file = auth_file.expanduser()
+        else:
+            auth_config_file = (
+                pathlib.Path("~/").expanduser()
+                / ".auth"
+                / f"kafka-aclient-{site_name}.properties"
+            )
         props = Properties()
         with auth_config_file.open("rb") as acf:
             props.load(acf, encoding="utf-8")
     return props
 
 
-def generate_admin_client(site_name: str) -> AdminClient:
+def generate_admin_client(
+    site_name: str, auth_file: pathlib.Path | None = None
+) -> AdminClient:
     """Generate an AdminClient instance for a give site.
 
     Parameters
     ----------
     site_name : str
         The name of the accessed site.
+    auth_file : pathlib.Path, optional
+        Path to an auth properties file. Passed through to ``create_config``.
 
     Returns
     -------
     AdminClient
         The site specific AdminClient instance.
     """
-    client_config = create_config(site_name)
+    client_config = create_config(site_name, auth_file)
     ac = AdminClient(client_config.properties)
     return ac
